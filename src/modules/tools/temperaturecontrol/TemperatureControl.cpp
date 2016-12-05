@@ -99,6 +99,7 @@ void TemperatureControl::on_module_loaded()
     this->register_for_event(ON_GET_PUBLIC_DATA);
 
     if(!this->readonly) {
+		this->register_for_event(ON_SECOND_TICK);
         this->register_for_event(ON_MAIN_LOOP);
         this->register_for_event(ON_SET_PUBLIC_DATA);
         this->register_for_event(ON_HALT);

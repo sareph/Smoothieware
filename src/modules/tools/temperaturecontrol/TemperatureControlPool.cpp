@@ -31,7 +31,7 @@ void TemperatureControlPool::load_tools()
         if( THEKERNEL->config->value(temperature_control_checksum, cs, enable_checksum )->as_bool() ) {
             TemperatureControl *controller = new TemperatureControl(cs, cnt++);
             THEKERNEL->add_module(controller);
-			tcs.push_back(controller);
+            tcs.push_back(controller);
         }
     }
 
@@ -39,8 +39,8 @@ void TemperatureControlPool::load_tools()
     if(cnt > 0) {
         PID_Autotuner *pidtuner = new PID_Autotuner();
         THEKERNEL->add_module( pidtuner );
-		this->register_for_event(ON_SECOND_TICK);
-		THEKERNEL->add_module(this);
+        this->register_for_event(ON_SECOND_TICK);
+        THEKERNEL->add_module(this);
     }
 	else
 	{

@@ -22,7 +22,7 @@ class TemperatureControl : public Module {
         void on_module_loaded();
         void on_main_loop(void* argument);
         void on_gcode_received(void* argument);
-		void on_second_tick(void* argument);
+        void on_second_tick(void* argument);
         void on_get_public_data(void* argument);
         void on_set_public_data(void* argument);
         void on_halt(void* argument);
@@ -32,7 +32,7 @@ class TemperatureControl : public Module {
         float get_temperature();
 
         bool is_waiting();
-		void temperature_out(bool terminate_line);
+        void temperature_out(bool terminate_line);
 		
         friend class PID_Autotuner;
 

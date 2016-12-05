@@ -94,7 +94,6 @@ void TemperatureControl::on_module_loaded()
     this->register_for_event(ON_GET_PUBLIC_DATA);
 
     if(!this->readonly) {
-        this->register_for_event(ON_SECOND_TICK);
         this->register_for_event(ON_MAIN_LOOP);
         this->register_for_event(ON_SET_PUBLIC_DATA);
         this->register_for_event(ON_HALT);
@@ -119,6 +118,16 @@ void TemperatureControl::on_main_loop(void *argument)
         THEKERNEL->streams->printf("HALT asserted - reset or M999 required\n");
         THEKERNEL->call_event(ON_HALT, nullptr);
     }
+}
+
+bool TemperatureControl::is_waiting()
+{
+	return waiting ? true : false;
+}
+
+void TemperatureControl::temperature_out(bool terminate_line)
+{
+	THEKERNEL->streams->printf("%s:%3.1f /%3.1f @%d%s", designator.c_str(), get_temperature(), ((target_temperature <= 0) ? 0.0 : target_temperature), o, (terminate_line == true) ? "\n" : " ");
 }
 
 // Get configuration from the config file
@@ -506,12 +515,6 @@ void TemperatureControl::pid_process(float temperature)
 
     this->heater_pin.pwm(this->o);
     this->lastInput = temperature;
-}
-
-void TemperatureControl::on_second_tick(void *argument)
-{
-    if (waiting)
-        THEKERNEL->streams->printf("%s:%3.1f /%3.1f @%d\n", designator.c_str(), get_temperature(), ((target_temperature <= 0) ? 0.0 : target_temperature), o);
 }
 
 void TemperatureControl::setPIDp(float p)

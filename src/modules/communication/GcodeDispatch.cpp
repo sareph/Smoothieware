@@ -93,7 +93,7 @@ try_again:
             if ( full_line.has_m ) {
                 if ( full_line.m == 110 ) {
                     currentline = ln;
-                    new_message.stream->printf("ok\r\n");
+                    new_message.ack(ln);
                     return;
                 }
             }
@@ -216,9 +216,11 @@ try_again:
                                 upload_fd = fopen(this->upload_filename.c_str(), "w");
                                 if(upload_fd != NULL) {
                                     this->uploading = true;
-                                    new_message.stream->printf("Writing to file: %s\r\nok\r\n", this->upload_filename.c_str());
+                                    new_message.stream->printf("Writing to file: %s\r\n", this->upload_filename.c_str());
+									new_message.ack(ln);
                                 } else {
-                                    new_message.stream->printf("open failed, File: %s.\r\nok\r\n", this->upload_filename.c_str());
+                                    new_message.stream->printf("open failed, File: %s.\r\n", this->upload_filename.c_str());
+									new_message.ack(ln);
                                 }
 
                                 // only save stuff from this stream
@@ -254,7 +256,7 @@ try_again:
                                 string str= single_command.substr(4) + possible_command;
                                 PublicData::set_value( panel_checksum, panel_display_message_checksum, &str );
                                 delete gcode;
-                                new_message.stream->printf("ok\r\n");
+                                new_message.ack(ln);
                                 return;
                             }
 
@@ -278,7 +280,7 @@ try_again:
                                     }
                                 }
 
-                                new_message.stream->printf("ok\r\n");
+                                new_message.ack(ln);
                                 return;
                             }
 
@@ -298,7 +300,8 @@ try_again:
                                 delete gcode->stream;
                                 delete gcode;
                                 __enable_irq();
-                                new_message.stream->printf("Settings Stored to %s\r\nok\r\n", THEKERNEL->config_override_filename());
+                                new_message.stream->printf("Settings Stored to %s\r\n", THEKERNEL->config_override_filename());
+								new_message.ack(ln);
                                 continue;
 
                             case 501: // load config override
@@ -311,13 +314,14 @@ try_again:
                                     SimpleShell::parse_command((gcode->m == 501) ? "load_command" : "save_command", arg, new_message.stream);
                                 }
                                 delete gcode;
-                                new_message.stream->printf("ok\r\n");
+                                new_message.ack(ln);
                                 return;
 
                             case 502: // M502 deletes config-override so everything defaults to what is in config
                                 remove(THEKERNEL->config_override_filename());
                                 delete gcode;
-                                new_message.stream->printf("config override file deleted %s, reboot needed\r\nok\r\n", THEKERNEL->config_override_filename());
+                                new_message.stream->printf("config override file deleted %s, reboot needed\r\n", THEKERNEL->config_override_filename());
+								new_message.ack(ln);
                                 continue;
 
                             case 503: { // M503 display live settings and indicates if there is an override file
@@ -369,10 +373,10 @@ try_again:
                             if(THEKERNEL->is_ok_per_line() || THEKERNEL->is_grbl_mode()) {
                                 // only send ok once per line if this is a multi g code line send ok on the last one
                                 if(possible_command.empty())
-                                    new_message.stream->printf("ok\r\n");
+                                    new_message.ack(ln);
                             } else {
                                 // maybe should do the above for all hosts?
-                                new_message.stream->printf("ok\r\n");
+                                new_message.ack(ln);
                             }
                         }
                     }
@@ -388,13 +392,14 @@ try_again:
                         uploading = false;
                         upload_filename.clear();
                         upload_stream= nullptr;
-                        new_message.stream->printf("Done saving file.\r\nok\r\n");
+                        new_message.stream->printf("Done saving file.\r\n");
+						new_message.ack(ln);
                         continue;
                     }
 
                     if(upload_fd == NULL) {
                         // error detected writing to file so discard everything until it stops
-                        new_message.stream->printf("ok\r\n");
+                        new_message.ack(ln);
                         continue;
                     }
 
@@ -415,7 +420,7 @@ try_again:
                             upload_fd = fopen(upload_filename.c_str(), "a");
                             cnt = 0;
                         }
-                        new_message.stream->printf("ok\r\n");
+                        new_message.ack(ln);
                         //printf("uploading file write ok\n");
                     }
                 }

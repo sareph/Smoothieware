@@ -17,6 +17,7 @@ using namespace std;
 #include "checksumm.h"
 #include "ConfigValue.h"
 #include "TemperatureControlPublicAccess.h"
+#include "StreamOutputPool.h"
 
 #define enable_checksum              CHECKSUM("enable")
 
@@ -30,6 +31,7 @@ void TemperatureControlPool::load_tools()
         if( THEKERNEL->config->value(temperature_control_checksum, cs, enable_checksum )->as_bool() ) {
             TemperatureControl *controller = new TemperatureControl(cs, cnt++);
             THEKERNEL->add_module(controller);
+			tcs.push_back(controller);
         }
     }
 
@@ -37,5 +39,33 @@ void TemperatureControlPool::load_tools()
     if(cnt > 0) {
         PID_Autotuner *pidtuner = new PID_Autotuner();
         THEKERNEL->add_module( pidtuner );
+		this->register_for_event(ON_SECOND_TICK);
+		THEKERNEL->add_module(this);
     }
+	else
+	{
+		delete this;
+	}
+}
+
+void TemperatureControlPool::on_second_tick(void* argument)
+{
+	bool is_waiting = false;
+	for (auto tc : tcs)
+	{
+		if (tc->is_waiting())
+		{
+			is_waiting = true;
+			break;
+		}
+	}
+	
+	if (is_waiting && THEKERNEL->streams)
+	{
+		for (auto tc : tcs)
+		{
+			tc->temperature_out(false);
+		}
+		THEKERNEL->streams->printf("\n");
+	}
 }

@@ -163,7 +163,7 @@ void init() {
     // Note order is important here must be after extruder so Tn as a parameter will get executed first
     TemperatureControlPool *tp= new TemperatureControlPool();
     tp->load_tools();
-    delete tp;
+    //delete tp;
     #endif
     #ifndef NO_TOOLS_LASER
     kernel->add_module( new Laser() );

@@ -10,9 +10,15 @@
 
 #include <vector>
 
-class TemperatureControlPool {
-    public:
+class TemperatureControl;
+
+class TemperatureControlPool : Module {
+    private:
+		std::vector <TemperatureControl *> tcs;
+
+	public:
         void load_tools();
+		void on_second_tick(void* argument);
 };
 
 

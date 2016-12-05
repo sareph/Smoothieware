@@ -139,7 +139,6 @@ class Robot : public Module {
         // generations. In general, the default value is more than enough for the intended CNC applications
         // of grbl, and should be on the order or greater than the size of the buffer to help with the
         // computational efficiency of generating arcs.
-
         int arc_correction;                                   // Setting : how often to rectify arc computation
         float max_speeds[3];                                  // Setting : max allowable speed in mm/m for each axis
 

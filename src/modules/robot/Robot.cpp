@@ -902,7 +902,15 @@ void Robot::process_move(Gcode *gcode, enum MOTION_MODE_T motion_mode)
         else
             this->feed_rate = this->to_millimeters( gcode->get_value('F') );
     }
-    
+
+	/*
+    if (target[X_AXIS] < last_machine_position[X_AXIS] &&
+        min_x_active)
+	{
+		target[X_AXIS] = last_machine_position[X_AXIS];
+	}
+	*/
+	
     if (this->soft_limits_enable) {
         // check if target is within allowed rect, if not, fix it
         if (this->homing_done[X_AXIS]) {

@@ -71,6 +71,8 @@ class TemperatureControl : public Module {
         float d_factor;
         float PIDdt;
 
+        float runaway_error_range;
+
         enum RUNAWAY_TYPE {NOT_HEATING, HEATING_UP, COOLING_DOWN, TARGET_TEMPERATURE_REACHED};
 
         // pack these to save memory
@@ -89,7 +91,6 @@ class TemperatureControl : public Module {
             bool use_bangbang:1;
             bool waiting:1;
             bool temp_violated:1;
-            bool link_to_tool:1;
             bool active:1;
             bool readonly:1;
             bool windup:1;

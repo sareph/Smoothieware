@@ -14,11 +14,14 @@
 #include "modules/robot/Conveyor.h"
 #include "PublicDataRequest.h"
 
+#include "checksumm.h"
+#include "Gcode.h"
+
 //#define sensor_checksum                    CHECKSUM("sensor")
 
 //#define readings_per_second_checksum       CHECKSUM("readings_per_second")
 
-IdleTimer::IdleTimer(uint16_t name, int index)
+IdleTimer::IdleTimer() : idle_time(0)
 {
 }
 
@@ -26,32 +29,27 @@ IdleTimer::~IdleTimer()
 {
 }
 
-void TemperatureControl::on_module_loaded()
+void IdleTimer::on_module_loaded()
 {
 }
 
-void TemperatureControl::on_halt(void *arg)
+void IdleTimer::on_halt(void *arg)
 {
 }
 
-void TemperatureControl::on_main_loop(void *argument)
+void IdleTimer::on_main_loop(void *argument)
 {
 }
 
-void TemperatureControl::on_gcode_received(void *argument)
+void IdleTimer::on_gcode_received(void *argument)
 {
     Gcode *gcode = static_cast<Gcode *>(argument);
-    if (gcode->has_m) {
-
+    if (gcode->has_g) {
+		idle_time = 0;
     }
 }
 
-void TemperatureControl::on_second_tick(void *argument)
+void IdleTimer::on_second_tick(void *argument)
 {
-    // Check whether or not there is a temperature runaway issue, if so stop everything and report it
-    if(THEKERNEL->is_halted()) return;
-
-    // see if runaway detection is enabled
-    if(this->runaway_heating_timeout == 0 && this->runaway_range == 0) return;
-
+	++idle_time;
 }

@@ -50,7 +50,7 @@ endif
 # Macro which will convert / to \ on Windows.
 ifeq "$(OS)" "Windows_NT"
 define convert-slash
-$(subst /,\,$1)
+$1
 endef
 else
 define convert-slash

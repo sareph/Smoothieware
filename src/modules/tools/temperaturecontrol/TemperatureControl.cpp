@@ -69,13 +69,14 @@
 
 TemperatureControl::TemperatureControl(uint16_t name, int index)
 {
-    name_checksum= name;
-    pool_index= index;
-    waiting= false;
-    temp_violated= false;
-    sensor= nullptr;
-    readonly= false;
-    tick= 0;
+    name_checksum = name;
+    pool_index = index;
+    waiting = false;
+    temp_violated = false;
+    sensor = nullptr;
+    readonly = false;
+    tick = 0;
+	control_algorithm = CONTROL_PID;
 }
 
 TemperatureControl::~TemperatureControl()
@@ -88,7 +89,7 @@ void TemperatureControl::on_module_loaded()
 
     // We start not desiring any temp
     this->target_temperature = UNDEFINED;
-    this->sensor_settings= false; // set to true if sensor settings have been overriden
+    this->sensor_settings = false; // set to true if sensor settings have been overriden
 
     // Settings
     this->load_config();
@@ -208,8 +209,12 @@ void TemperatureControl::load_config()
 
     if(!this->readonly) {
         // used to enable bang bang control of heater
-        this->use_bangbang = THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, bang_bang_checksum)->by_default(false)->as_bool();
-        this->hysteresis = THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, hysteresis_checksum)->by_default(2)->as_number();
+        
+		if (THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, bang_bang_checksum)->by_default(false)->as_bool()) {
+			this->control_algorithm = CONTROL_BANGBANG;
+		}
+        
+		this->hysteresis = THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, hysteresis_checksum)->by_default(2)->as_number();
         this->windup = THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, windup_checksum)->by_default(false)->as_bool();
         this->heater_pin.max_pwm( THEKERNEL->config->value(temperature_control_checksum, this->name_checksum, max_pwm_checksum)->by_default(255)->as_number() );
         this->heater_pin.set(0);
@@ -267,7 +272,24 @@ void TemperatureControl::on_gcode_received(void *argument)
                 }
 
             }else if(!gcode->has_letter('S')) {
-                gcode->stream->printf("%s(S%d): using %s\n", this->designator.c_str(), this->pool_index, this->readonly?"Readonly" : this->use_bangbang?"Bangbang":"PID");
+				const char * algo = "Unknown";
+				switch (this->control_algorithm)
+				{
+					case CONTROL_PID: {
+						algo = "PID";
+						break;
+					}
+					case CONTROL_BANGBANG: {
+						algo = "Bangbang";
+						break;
+					}
+					case CONTROL_DEADTIME: {
+						algo = "DeadTime";
+						break;
+					}
+				}
+				
+                gcode->stream->printf("%s(S%d): using %s\n", this->designator.c_str(), this->pool_index, this->readonly?"Readonly" : algo);
                 sensor->get_raw();
                 TempSensor::sensor_options_t options;
                 if(sensor->get_optional(options)) {
@@ -500,50 +522,72 @@ uint32_t TemperatureControl::thermistor_read_tick(uint32_t dummy)
  */
 void TemperatureControl::pid_process(float temperature)
 {
-    if(use_bangbang) {
-        // bang bang is very simple, if temp is < target - hysteresis turn on full else if  temp is > target + hysteresis turn heater off
-        // good for relays
-        if(temperature > (target_temperature + hysteresis) && this->o > 0) {
-            heater_pin.set(false);
-            this->o = 0; // for display purposes only
+	switch (control_algorithm)
+	{
+		case CONTROL_PID: {
+			// regular PID control	
+			float error = target_temperature - temperature;
 
-        } else if(temperature < (target_temperature - hysteresis) && this->o <= 0) {
-            if(heater_pin.max_pwm() >= 255) {
-                // turn on full
-                this->heater_pin.set(true);
-                this->o = 255; // for display purposes only
-            } else {
-                // only to whatever max pwm is configured
-                this->heater_pin.pwm(heater_pin.max_pwm());
-                this->o = heater_pin.max_pwm(); // for display purposes only
-            }
-        }
-        return;
-    }
+			float new_I = this->iTerm + (error * this->i_factor);
+			if (new_I > this->i_max) new_I = this->i_max;
+			else if (new_I < 0.0) new_I = 0.0;
+			if(!this->windup) this->iTerm= new_I;
 
-    // regular PID control
-    float error = target_temperature - temperature;
+			float d = (temperature - this->lastInput);
 
-    float new_I = this->iTerm + (error * this->i_factor);
-    if (new_I > this->i_max) new_I = this->i_max;
-    else if (new_I < 0.0) new_I = 0.0;
-    if(!this->windup) this->iTerm= new_I;
+			// calculate the PID output
+			// TODO does this need to be scaled by max_pwm/256? I think not as p_factor already does that
+			this->o = (this->p_factor * error) + new_I - (this->d_factor * d);
+			
+			if (this->o >= heater_pin.max_pwm())
+				this->o = heater_pin.max_pwm();
+			else if (this->o < 0)
+				this->o = 0;
+			else if(this->windup)
+				this->iTerm = new_I; // Only update I term when output is not saturated.
 
-    float d = (temperature - this->lastInput);
+			this->heater_pin.pwm(this->o);
+			this->lastInput = temperature;			
+			break;
+		}
+		case CONTROL_BANGBANG: {
+			// bang bang is very simple, if temp is < target - hysteresis turn on full else if  temp is > target + hysteresis turn heater off
+			// good for relays
+			if(temperature > (target_temperature + hysteresis) && this->o > 0) {
+				heater_pin.set(false);
+				this->o = 0; // for display purposes only
 
-    // calculate the PID output
-    // TODO does this need to be scaled by max_pwm/256? I think not as p_factor already does that
-    this->o = (this->p_factor * error) + new_I - (this->d_factor * d);
-
-    if (this->o >= heater_pin.max_pwm())
-        this->o = heater_pin.max_pwm();
-    else if (this->o < 0)
-        this->o = 0;
-    else if(this->windup)
-        this->iTerm = new_I; // Only update I term when output is not saturated.
-
-    this->heater_pin.pwm(this->o);
-    this->lastInput = temperature;
+			} else if(temperature < (target_temperature - hysteresis) && this->o <= 0) {
+				if(heater_pin.max_pwm() >= 255) {
+					// turn on full
+					this->heater_pin.set(true);
+					this->o = 255; // for display purposes only
+				} else {
+					// only to whatever max pwm is configured
+					this->heater_pin.pwm(heater_pin.max_pwm());
+					this->o = heater_pin.max_pwm(); // for display purposes only
+				}
+			}
+			return;
+		}
+		case CONTROL_DEADTIME: {
+			/*
+			if (target_temperature - temperature > 22.f)
+			{
+				this->o = heater_pin.max_pwm();
+			}
+			else
+			{
+				#define DEAD_TIME 45.0f
+				//act->startHoldDecouple(time);
+				float raising = (1.f / this->PIDdt) * (temperature - last_reading); // raising dT/dt, 3.33 = reciproke of time interval (300 ms)
+				this->iTerm = 0.25 * (3.0 * this->iTerm + raising); // damp raising
+				this->o = (temperature + this->iTerm * DEAD_TIME > target_temperature ? 0 : 235);
+			}
+			*/			
+			break;
+		}
+	}
 }
 
 void TemperatureControl::on_second_tick(void *argument)
@@ -557,7 +601,7 @@ void TemperatureControl::on_second_tick(void *argument)
     // check every 8 seconds, depends on tick being 3 bits
     if(++tick != 0) return;
 
-    if(this->target_temperature <= 0){ // If we are not trying to heat, state is NOT_HEATING
+	if(this->target_temperature <= 0){ // If we are not trying to heat, state is NOT_HEATING
         this->runaway_state = NOT_HEATING;
 
     }else{
@@ -565,9 +609,9 @@ void TemperatureControl::on_second_tick(void *argument)
         // heater is active
         switch( this->runaway_state ){
             case NOT_HEATING: // If we were previously not trying to heat, but we are now, change to state WAITING_FOR_TEMP_TO_BE_REACHED
-                this->runaway_state= (this->target_temperature >= current_temperature) ? HEATING_UP : COOLING_DOWN;
+                this->runaway_state = (this->target_temperature >= current_temperature) ? HEATING_UP : COOLING_DOWN;
                 this->runaway_timer = 0;
-                tick= 0;
+                tick = 0;
                 break;
 
             case HEATING_UP:
@@ -577,22 +621,21 @@ void TemperatureControl::on_second_tick(void *argument)
                     (runaway_state == COOLING_DOWN && current_temperature <= (this->target_temperature + this->runaway_error_range)) ) {
                     this->runaway_state = TARGET_TEMPERATURE_REACHED;
                     this->runaway_timer = 0;
-                    tick= 0;
-
+                    tick = 0;
                 }else{
                     float delta = current_temperature - previous_temperature;
                     if (this->runaway_state == COOLING_DOWN && delta > 0.f) {
                         // temperature is rising, should be falling
-                        this->runaway_timer++;
+                        this->runaway_heating_cooling_timer++;
                     } else if (this->runaway_state == HEATING_UP) {
-                        
-                        if (delta < 0.f)
-                        {
+                        if (delta < 0.f) {
                             // temperature is falling, should be rising
-                            this->runaway_timer++;
-                        }
-                        
-                        // we are still heating up see if we have hit the max time allowed, maybe heater power is too low
+                            this->runaway_heating_cooling_timer++;
+                        } else {
+							this->runaway_heating_cooling_timer = 0;
+						}
+						
+                        // ... we are still heating up see if we have hit the max time allowed, maybe heater power is too low
                         if(this->runaway_heating_timeout > 0 && ++this->runaway_timer > this->runaway_heating_timeout){
                             THEKERNEL->streams->printf("ERROR: Temperature took too long to be reached on %s, HALT asserted, TURN POWER OFF IMMEDIATELY - reset or M999 required\n", designator.c_str());
                             THEKERNEL->call_event(ON_HALT, nullptr);
@@ -600,25 +643,25 @@ void TemperatureControl::on_second_tick(void *argument)
                             this->runaway_timer = 0;
                             break;
                         }
-                        
                     } else {
-                        this->runaway_timer = 0;
+                        this->runaway_heating_cooling_timer = 0;
                     }                    
                     
-                    previous_temperature = current_temperature;
-                    
-                    if (this->runaway_timer > 1)
+                    if (this->runaway_heating_cooling_timer > 1)
                     {
                         THEKERNEL->streams->printf("ERROR: Thermal runaway on %s detected, temperature should be %s but it's %s, HALT asserted, TURN POWER OFF IMMEDIATELY - reset or M999 required\n", 
                             designator.c_str(),
                             (this->runaway_state == COOLING_DOWN) ? "falling" : "falling",
-                            (this->runaway_state == COOLING_DOWN) ? "rising" : "rising");
+                            (this->runaway_state == COOLING_DOWN) ? "rising" : "rising"
+						    );
                         
                         THEKERNEL->call_event(ON_HALT, nullptr);
                         this->runaway_state = NOT_HEATING;
                         this->runaway_timer = 0;
                     }
 
+                    previous_temperature = current_temperature;
+                    tick = 0;					
                 }
                 break;
 
@@ -630,13 +673,12 @@ void TemperatureControl::on_second_tick(void *argument)
                     // If the temperature is outside the acceptable range for 8 seconds, this allows for some noise spikes without halting
                     if(fabsf(delta) > this->runaway_range){
                         if(this->runaway_timer++ >= 1) { // this being 8 seconds
-                            THEKERNEL->streams->printf("ERROR: Temperature runaway on %s (delta temp %.3f), HALT asserted, TURN POWER OFF IMMEDIATELY - reset or M999 required (ct: %.3f, tt: %.3f, rs: %d)\n", 
-                                designator.c_str(), delta, current_temperature, this->target_temperature, this->runaway_state);
+                            THEKERNEL->streams->printf("ERROR: Temperature runaway on %s (delta temp %.3f), HALT asserted, TURN POWER OFF IMMEDIATELY - reset or M999 required\n", 
+                                designator.c_str(), delta);
                             THEKERNEL->call_event(ON_HALT, nullptr);
                             this->runaway_state = NOT_HEATING;
                             this->runaway_timer= 0;
                         }
-
                     }else{
                         this->runaway_timer= 0;
                     }

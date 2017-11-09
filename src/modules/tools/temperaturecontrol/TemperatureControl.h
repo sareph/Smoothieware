@@ -76,6 +76,7 @@ class TemperatureControl : public Module {
         float runaway_error_range;
 
         enum RUNAWAY_TYPE {NOT_HEATING, HEATING_UP, COOLING_DOWN, TARGET_TEMPERATURE_REACHED};
+		enum CONTROL_TYPE {CONTROL_PID, CONTROL_BANGBANG, CONTROL_DEADTIME};
 
         // pack these to save memory
         struct {
@@ -87,9 +88,10 @@ class TemperatureControl : public Module {
             // Temperature runaway config options
             uint8_t runaway_range:6; // max 63
             uint16_t runaway_heating_timeout:9; // 4088 secs
+			uint16_t runaway_heating_cooling_timer:9;
             uint16_t runaway_timer:9;
             uint8_t tick:3;
-            bool use_bangbang:1;
+            uint8_t control_algorithm:2;
             bool waiting:1;
             bool temp_violated:1;
             bool active:1;

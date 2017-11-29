@@ -29,6 +29,7 @@
 // Temp sensor implementations:
 #include "Thermistor.h"
 #include "max31855.h"
+#include "max31865.h"
 #include "AD8495.h"
 #include "PT100_E3D.h"
 
@@ -191,6 +192,8 @@ void TemperatureControl::load_config()
         sensor = new Thermistor();
     } else if(sensor_type.compare("max31855") == 0) {
         sensor = new Max31855();
+    } else if(sensor_type.compare("max31865") == 0) {
+        sensor = new Max31865();
     } else if(sensor_type.compare("ad8495") == 0) {
         sensor = new AD8495();
     } else if(sensor_type.compare("pt100_e3d") == 0) {
@@ -611,6 +614,7 @@ void TemperatureControl::on_second_tick(void *argument)
             case NOT_HEATING: // If we were previously not trying to heat, but we are now, change to state WAITING_FOR_TEMP_TO_BE_REACHED
                 this->runaway_state = (this->target_temperature >= current_temperature) ? HEATING_UP : COOLING_DOWN;
                 this->runaway_timer = 0;
+				this->runaway_heating_cooling_timer = 0;
                 tick = 0;
                 break;
 
@@ -621,6 +625,7 @@ void TemperatureControl::on_second_tick(void *argument)
                     (runaway_state == COOLING_DOWN && current_temperature <= (this->target_temperature + this->runaway_error_range)) ) {
                     this->runaway_state = TARGET_TEMPERATURE_REACHED;
                     this->runaway_timer = 0;
+					this->runaway_heating_cooling_timer = 0;
                     tick = 0;
                 }else{
                     float delta = current_temperature - previous_temperature;

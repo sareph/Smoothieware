@@ -5,29 +5,46 @@
       you should have received a copy of the gnu general public license along with smoothie. if not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef max31855_h
-#define max31855_h
+#ifndef max31865_h
+#define max31865_h
 
 #include "TempSensor.h"
+#include <atomic>
 #include <string>
 #include <libs/Pin.h>
 #include <mbed.h>
-#include "RingBuffer.h"
 
-class Max31855 : public TempSensor
+class Max31865 : public TempSensor
 {
 public:
-    Max31855();
-    ~Max31855();
+    Max31865();
+    ~Max31865();
     void UpdateConfig(uint16_t module_checksum, uint16_t name_checksum);
     float get_temperature();
+    void get_raw();
     void on_idle();
 
 private:
-    struct { bool read_flag:1; } ; //when true, the next call to on_idle will read a new temperature value
+    void init_rtd();
+    float adc_value_to_resistance(uint16_t adcValue);
+    float resistance_to_temperature(float Rt);
+    void print_errors(bool always = false);
+
+    uint8_t read_register_8(uint8_t reg);
+    uint16_t read_register_16(uint8_t reg);
+    void write_register_8(uint8_t reg, uint8_t val);
+
     Pin spi_cs_pin;
     mbed::SPI *spi;
-    RingBuffer<float, 16> readings;
+
+    float rtd_nominal_resistance;
+    float reference_resistor;
+    bool use_50hz_filter;
+
+    uint32_t last_reading_time;
+    std::atomic<float> last_temperature;
+
+    uint8_t errors_reported;
 };
 
 #endif
